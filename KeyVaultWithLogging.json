@@ -1,0 +1,118 @@
+{
+  "$schema": "http://schema.management.azure.com/schemas/2014-04-01-preview/deploymentTemplate.json",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentShortName": {
+      "type": "string",
+      "metadata": {
+        "description": "Environment short name eg dev"
+      }
+    },
+    "regionShortName": {
+      "type": "string",
+      "metadata": {
+        "description": "Region short name for naming - eg uks , ukw"
+      }
+    },
+    "AdoObjectId": {
+      "type": "string",
+      "metadata": {
+        "description": "AAD Object Id for the Azure Dev Ops Service Principal Id"
+      }
+    },
+    "resourceDiagName": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the resource diagnostic e.g My-KeyVault-Audit"
+      }
+    },
+    "logAnalytics": {
+      "type": "string",
+      "metadata": {
+        "description": "The oms locations to send to e.g my-oms-workspace"
+      }
+    },
+    "logAnalyticsResourceGroup": {
+      "type": "string",
+      "metadata": {
+        "description": "The oms resource group e.g my-oms-rg"
+      }
+    }
+  },
+  "variables": {
+    "projectName": "testVault",
+    "environmentRegion": "[concat(parameters('environmentShortName') ,'-', parameters('regionShortName'))]",
+    "keyVaultName": "[concat(variables('projectName'),'-',variables('environmentRegion'),'-kv')]",
+    "subscription": "[concat('subscriptions/', subscription().subscriptionId)]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.KeyVault/vaults",
+      "name": "[variables('keyVaultName')]",
+      "apiVersion": "2016-10-01",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "enabledForDeployment": false,
+        "enabledForDiskEncryption": false,
+        "enabledForTemplateDeployment": false,
+        "tenantId": "[subscription().tenantId]",
+        "accessPolicies": [
+          {
+            "tenantId": "[subscription().tenantId]",
+            "objectId": "[parameters('AdoObjectId')]",
+            "permissions": {
+              "keys": [
+                "list",
+                "get"
+              ],
+              "secrets": [
+                "list",
+                "get"
+              ],
+              "certificates": [
+                "list",
+                "get",
+                "import"
+              ]
+            }
+          }
+        ],
+        "sku": {
+          "name": "standard",
+          "family": "A"
+        }
+      },
+      "resources": [
+        {
+          "name": "[concat(variables('keyVaultName'), '/Microsoft.Insights/', parameters('resourceDiagName'))]",
+          "type": "Microsoft.KeyVault/vaults/providers/diagnosticSettings",
+          "apiVersion": "2017-05-01-preview",
+          "location": "[resourceGroup().location]",
+          "dependsOn": [
+            "[variables('keyVaultName')]"
+          ],
+          "properties": {
+            "workspaceId": "[resourceId(parameters('logAnalyticsResourceGroup'), 'Microsoft.OperationalInsights/workspaces', parameters('logAnalytics'))]",
+            "metrics": [
+              {
+                "category": "AllMetrics",
+                "enabled": true,
+                "retentionPolicy": {
+                  "days": 0,
+                  "enabled": false
+                },
+                "timeGrain": null
+              }
+            ],
+            "logs": [
+              {
+                "category": "AuditEvent",
+                "enabled": true
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
